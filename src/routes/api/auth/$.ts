@@ -1,13 +1,12 @@
 import "@/lib/vercel-auth-env";
 import { createFileRoute } from "@tanstack/react-router";
-import { auth } from "@/lib/auth/server";
 
 /**
  * Frozen `src/lib/auth/server.ts` only trusts BETTER_AUTH_URL + localhost:8080.
  * Personal Vercel deploys often never inject BETTER_AUTH_URL, so the gilt origin
  * is rejected. Rebuild the request with Origin remapped to localhost:8080 for
- * the CSRF check, copying the body as bytes (do not Proxy Headers — undici
- * private fields throw). Cookie domain is unchanged.
+ * the CSRF check, copying the body as bytes. Auth is imported inside the
+ * handler so a boot crash returns JSON instead of an empty 500.
  */
 function isSpeakAiProductionOrigin(origin: string): boolean {
   try {
@@ -40,7 +39,9 @@ async function withTrustedOrigin(request: Request): Promise<Request> {
 
 async function handleAuth(request: Request) {
   try {
-    return await auth.handler(await withTrustedOrigin(request));
+    const req = await withTrustedOrigin(request);
+    const { auth } = await import("@/lib/auth/server");
+    return await auth.handler(req);
   } catch (err) {
     console.error("[auth]", err);
     const message = err instanceof Error ? err.message : "Sign-in is unavailable.";
