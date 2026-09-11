@@ -11,6 +11,11 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
+function isPersonalVercelHost(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.location.hostname.endsWith(".vercel.app");
+}
+
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
@@ -20,6 +25,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const socialBlocked = isPersonalVercelHost();
 
   if (!isPending && user) {
     void navigate({ to: "/dashboard" });
@@ -52,6 +58,22 @@ function Login() {
     }
   }
 
+  async function onSocial(providerId: string) {
+    if (socialBlocked) {
+      toast.error("Gmail / X is not connected on this live URL yet. Use email and password — that works now.");
+      return;
+    }
+    try {
+      await signIn(providerId, { callbackURL: "/onboarding", errorCallbackURL: "/login" });
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Could not start Google/X sign-in. Use email and password.",
+      );
+    }
+  }
+
   return (
     <main className="grid min-h-dvh lg:grid-cols-2">
       <section className="dark hidden flex-col justify-between bg-bg p-10 text-fg lg:flex">
@@ -71,25 +93,39 @@ function Login() {
             <Wordmark />
           </div>
           <h2 className="font-display text-3xl">Welcome</h2>
-          <p className="mt-1 text-sm text-muted">Sign in with email, Google, or X. Phone is saved on your profile.</p>
+          <p className="mt-1 text-sm text-muted">
+            {socialBlocked
+              ? "Use email and password to sign in. Gmail/X on this live URL is being connected."
+              : "Sign in with email, Google, or X. Phone is saved on your profile."}
+          </p>
+          {socialBlocked ? (
+            <p className="mt-2 text-sm text-muted">
+              Is live site par Gmail abhi connect nahi hai. Email aur password se login karein — woh chal raha
+              hai.
+            </p>
+          ) : null}
 
           {authEnabled ? (
             <>
-              <div className="mt-6 space-y-2">
-                {GROK_PROVIDERS.map((p) => (
-                  <Button
-                    key={p.providerId}
-                    type="button"
-                    variant="secondary"
-                    className="w-full"
-                    onClick={() => signIn(p.providerId, { callbackURL: "/onboarding" })}
-                  >
-                    Continue with {p.label}
-                  </Button>
-                ))}
-              </div>
-              <p className="my-5 text-center text-xs text-muted">or email and password</p>
-              <Tabs value={mode} onValueChange={(v) => setMode(v as "in" | "up")}>
+              {socialBlocked ? null : (
+                <>
+                  <div className="mt-6 space-y-2">
+                    {GROK_PROVIDERS.map((p) => (
+                      <Button
+                        key={p.providerId}
+                        type="button"
+                        variant="secondary"
+                        className="w-full"
+                        onClick={() => void onSocial(p.providerId)}
+                      >
+                        Continue with {p.label}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="my-5 text-center text-xs text-muted">or email and password</p>
+                </>
+              )}
+              <Tabs className={socialBlocked ? "mt-6" : undefined} value={mode} onValueChange={(v) => setMode(v as "in" | "up")}>
                 <TabsList className="w-full">
                   <TabsTrigger value="in" className="flex-1">
                     Sign in
@@ -151,7 +187,11 @@ function Login() {
                 type="button"
                 className="mt-3 text-xs text-muted underline-offset-4 hover:underline"
                 onClick={() =>
-                  toast.message("Password reset needs email delivery, which is not configured here. Use Google, X, or create a new account.")
+                  toast.message(
+                    socialBlocked
+                      ? "Password reset needs email delivery. Create a new account with the same email if you are stuck."
+                      : "Password reset needs email delivery, which is not configured here. Use Google, X, or create a new account.",
+                  )
                 }
               >
                 Forgot password?
