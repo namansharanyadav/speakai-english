@@ -1,5 +1,7 @@
-import "./vercel-auth-env";
+import { applyVercelAuthEnv } from "./vercel-auth-env";
 import { pendingMigrations } from "../../scripts/migration-plan.mjs";
+
+applyVercelAuthEnv();
 
 /** Which database backend is active. */
 export type DbSource = "neon" | "pglite";

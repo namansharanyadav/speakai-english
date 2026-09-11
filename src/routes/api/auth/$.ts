@@ -1,6 +1,8 @@
-import "@/lib/vercel-auth-env";
+import { applyVercelAuthEnv } from "@/lib/vercel-auth-env";
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
+
+applyVercelAuthEnv();
 
 export const Route = createFileRoute("/api/auth/$")({
   server: {
