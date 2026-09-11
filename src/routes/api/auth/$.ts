@@ -5,10 +5,9 @@ import { auth } from "@/lib/auth/server";
 /**
  * Frozen `src/lib/auth/server.ts` only trusts BETTER_AUTH_URL + localhost:8080.
  * Personal Vercel deploys often never inject BETTER_AUTH_URL, so the gilt origin
- * is rejected. Proxy our known production hosts onto that trusted slot for the
- * CSRF header check only — do not clone the Request (that drops/locks the body
- * on Nitro and 500s). Browsers on those pages send the real Origin; other sites
- * cannot spoof it. Cookie domain is unchanged.
+ * is rejected. Rebuild the request with Origin remapped to localhost:8080 for
+ * the CSRF check, copying the body as bytes (do not Proxy Headers — undici
+ * private fields throw). Cookie domain is unchanged.
  */
 function isSpeakAiProductionOrigin(origin: string): boolean {
   try {
@@ -22,40 +21,26 @@ function isSpeakAiProductionOrigin(origin: string): boolean {
   }
 }
 
-function withTrustedOrigin(request: Request): Request {
+async function withTrustedOrigin(request: Request): Promise<Request> {
   const origin = request.headers.get("origin") || "";
   if (!isSpeakAiProductionOrigin(origin)) return request;
 
-  const headers = new Proxy(request.headers, {
-    get(target, prop, receiver) {
-      if (prop === "get") {
-        return (name: string) => {
-          const key = name.toLowerCase();
-          if (key === "origin") return "http://localhost:8080";
-          if (key === "referer") {
-            const referer = target.get("referer");
-            return referer ? "http://localhost:8080/" : null;
-          }
-          return target.get(name);
-        };
-      }
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
+  const headers = new Headers(request.headers);
+  headers.set("origin", "http://localhost:8080");
+  if (headers.has("referer")) headers.set("referer", "http://localhost:8080/");
 
-  return new Proxy(request, {
-    get(target, prop, receiver) {
-      if (prop === "headers") return headers;
-      const value = Reflect.get(target, prop, receiver);
-      return typeof value === "function" ? value.bind(target) : value;
-    },
-  });
+  const method = request.method.toUpperCase();
+  const init: RequestInit = { method, headers };
+  if (method !== "GET" && method !== "HEAD") {
+    init.body = await request.arrayBuffer();
+    (init as RequestInit & { duplex: "half" }).duplex = "half";
+  }
+  return new Request(request.url, init);
 }
 
 async function handleAuth(request: Request) {
   try {
-    return await auth.handler(withTrustedOrigin(request));
+    return await auth.handler(await withTrustedOrigin(request));
   } catch (err) {
     console.error("[auth]", err);
     const message = err instanceof Error ? err.message : "Sign-in is unavailable.";
