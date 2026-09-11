@@ -1,3 +1,4 @@
+import "@/lib/vercel-auth-env";
 import { createFileRoute } from "@tanstack/react-router";
 import { auth } from "@/lib/auth/server";
 
