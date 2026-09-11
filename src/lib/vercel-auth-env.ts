@@ -1,13 +1,11 @@
+import { PROD_SECRETS } from "./prod-secrets";
+
 /**
  * On Vercel, Better Auth only trusts BETTER_AUTH_URL. Personal Vercel deploys
  * often omit it, which makes sign-up fail with "Invalid origin".
  *
- * Use dynamic `process.env[key]` access so Vite does not inline these away.
- * Hardcode the production alias — VERCEL_URL is a per-deploy host and would
- * reject the public gilt origin.
- *
- * Deploy overlays may assign DATABASE_URL / XAI_API_KEY / BETTER_AUTH_SECRET
- * at the top of this file before this module body runs.
+ * `PROD_SECRETS` is inlined at deploy time (see scripts/inject-prod-env.mjs)
+ * so Vite cannot drop DATABASE_URL / BETTER_AUTH_URL at build.
  */
 const PRODUCTION_ORIGIN = "https://speakai-english-gilt.vercel.app";
 
@@ -18,8 +16,13 @@ function readEnv(key: string): string | undefined {
 
 export function applyVercelAuthEnv(): void {
   if (typeof process === "undefined") return;
+
+  for (const [key, value] of Object.entries(PROD_SECRETS)) {
+    if (value && !readEnv(key)) process.env[key] = value;
+  }
+
   const onVercel = Boolean(readEnv("VERCEL") || readEnv("VERCEL_ENV") || readEnv("VERCEL_URL"));
-  if (!onVercel) return;
+  if (!onVercel && Object.keys(PROD_SECRETS).length === 0) return;
 
   if (!readEnv("BETTER_AUTH_URL")) {
     process.env.BETTER_AUTH_URL = PRODUCTION_ORIGIN;

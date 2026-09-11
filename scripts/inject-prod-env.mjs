@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 /**
- * Deploy overlay: inline .prod-env.json into vercel-auth-env.ts so serverless
- * runtimes see DATABASE_URL / auth / xAI keys even when Vercel project env is empty.
- * The JSON file is uploaded at deploy time and is gitignored.
+ * Deploy overlay: write .prod-env.json into src/lib/prod-secrets.ts so the
+ * serverless bundle inlines DATABASE_URL / auth / xAI keys. JSON is uploaded
+ * at deploy time and gitignored.
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 
 const envPath = ".prod-env.json";
-const target = "src/lib/vercel-auth-env.ts";
-if (!existsSync(envPath) || !existsSync(target)) {
-  console.log("[inject-prod-env] skip — overlay or target missing");
+const target = "src/lib/prod-secrets.ts";
+if (!existsSync(envPath)) {
+  console.log("[inject-prod-env] skip — overlay missing");
   process.exit(0);
 }
 
@@ -19,14 +19,13 @@ if (!extra || typeof extra !== "object") {
   process.exit(0);
 }
 
-const lines = Object.entries(extra)
-  .filter(([, value]) => typeof value === "string" && value)
-  .map(
-    ([key, value]) =>
-      `process.env[${JSON.stringify(key)}] = process.env[${JSON.stringify(key)}] || ${JSON.stringify(value)};`,
-  );
-if (lines.length === 0) process.exit(0);
+const secrets = {};
+for (const [key, value] of Object.entries(extra)) {
+  if (typeof value === "string" && value) secrets[key] = value;
+}
 
-const src = readFileSync(target, "utf8");
-writeFileSync(target, `${lines.join("\n")}\n${src}`);
-console.log("[inject-prod-env] applied", Object.keys(extra).join(", "));
+writeFileSync(
+  target,
+  `/** Generated at deploy. Do not commit. */\nexport const PROD_SECRETS: Record<string, string> = ${JSON.stringify(secrets, null, 2)};\n`,
+);
+console.log("[inject-prod-env] applied", Object.keys(secrets).join(", "));
