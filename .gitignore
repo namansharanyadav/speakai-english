@@ -10,6 +10,7 @@ attachments
 .env
 .env.*
 !.env.example
+.prod-env.json
 .grok/preview.log
 .grok/preview.pid
 .grok/skills

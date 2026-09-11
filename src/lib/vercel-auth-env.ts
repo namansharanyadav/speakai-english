@@ -1,40 +1,32 @@
 /**
- * On Vercel, Better Auth only trusts BETTER_AUTH_URL. The Grok deployer injects
- * that var; a personal Vercel project often does not, which makes sign-up/sign-in
- * fail with "Invalid origin". Set origin + a stable secret from Vercel metadata
- * before `src/lib/auth/server.ts` reads process.env (imported first from db.ts).
+ * On Vercel, Better Auth only trusts BETTER_AUTH_URL. Personal Vercel deploys
+ * often omit it, which makes sign-up fail with "Invalid origin".
  *
- * No-ops in the sandbox preview (VERCEL is unset).
+ * Use dynamic `process.env[key]` access so Vite does not inline these away.
+ * Hardcode the production alias — VERCEL_URL is a per-deploy host and would
+ * reject the public gilt origin.
+ *
+ * Deploy overlays may assign DATABASE_URL / XAI_API_KEY / BETTER_AUTH_SECRET
+ * at the top of this file before this module body runs.
  */
-function trim(value: string | undefined): string | undefined {
-  const v = value?.trim();
-  return v ? v : undefined;
-}
+const PRODUCTION_ORIGIN = "https://speakai-english-gilt.vercel.app";
 
-function httpsOrigin(hostOrUrl: string | undefined): string | undefined {
-  const raw = trim(hostOrUrl);
-  if (!raw) return undefined;
-  if (raw.startsWith("https://") || raw.startsWith("http://")) return raw.replace(/\/+$/, "");
-  return `https://${raw.replace(/\/+$/, "")}`;
+function readEnv(key: string): string | undefined {
+  const value = typeof process === "undefined" ? undefined : process.env[key]?.trim();
+  return value ? value : undefined;
 }
 
 export function applyVercelAuthEnv(): void {
   if (typeof process === "undefined") return;
-  if (process.env.VERCEL !== "1") return;
+  const onVercel = Boolean(readEnv("VERCEL") || readEnv("VERCEL_ENV") || readEnv("VERCEL_URL"));
+  if (!onVercel) return;
 
-  if (!trim(process.env.BETTER_AUTH_URL)) {
-    const origin =
-      httpsOrigin(process.env.VERCEL_PROJECT_PRODUCTION_URL) ??
-      httpsOrigin(process.env.VERCEL_URL) ??
-      "https://speakai-english-gilt.vercel.app";
-    process.env.BETTER_AUTH_URL = origin;
+  if (!readEnv("BETTER_AUTH_URL")) {
+    process.env.BETTER_AUTH_URL = PRODUCTION_ORIGIN;
   }
 
-  if (!trim(process.env.BETTER_AUTH_SECRET)) {
-    const seed =
-      trim(process.env.VERCEL_PROJECT_ID) ??
-      trim(process.env.VERCEL_URL) ??
-      "speakai-english";
+  if (!readEnv("BETTER_AUTH_SECRET")) {
+    const seed = readEnv("VERCEL_PROJECT_ID") ?? "speakai-english";
     process.env.BETTER_AUTH_SECRET = `speakai-english/${seed}/better-auth-secret-v1`;
   }
 }

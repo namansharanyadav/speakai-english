@@ -13,10 +13,26 @@
  * the same files at startup instead (see src/lib/db.ts).
  */
 import { readdir, readFile } from "node:fs/promises";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import pg from "pg";
 import { pendingMigrations } from "./migration-plan.mjs";
+
+const rootDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+const prodEnvPath = join(rootDir, ".prod-env.json");
+if (existsSync(prodEnvPath)) {
+  try {
+    const extra = JSON.parse(readFileSync(prodEnvPath, "utf8"));
+    if (extra && typeof extra === "object") {
+      for (const [key, value] of Object.entries(extra)) {
+        if (typeof value === "string" && value && !process.env[key]) process.env[key] = value;
+      }
+    }
+  } catch {
+    // ignore malformed overlay
+  }
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
