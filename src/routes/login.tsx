@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Wordmark } from "@/components/logo";
 import { Button } from "@/components/ui/button";
@@ -11,11 +11,6 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/login")({ component: Login });
 
-function isPersonalVercelHost(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.location.hostname.endsWith(".vercel.app");
-}
-
 function Login() {
   const { user, isPending } = useCurrentUserState();
   const navigate = useNavigate();
@@ -25,7 +20,14 @@ function Login() {
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const socialBlocked = isPersonalVercelHost();
+  const [allowSocial, setAllowSocial] = useState(false);
+  const [vercelNotice, setVercelNotice] = useState(false);
+
+  useEffect(() => {
+    const vercel = window.location.hostname.endsWith(".vercel.app");
+    setVercelNotice(vercel);
+    setAllowSocial(!vercel);
+  }, []);
 
   if (!isPending && user) {
     void navigate({ to: "/dashboard" });
@@ -59,7 +61,7 @@ function Login() {
   }
 
   async function onSocial(providerId: string) {
-    if (socialBlocked) {
+    if (!allowSocial) {
       toast.error("Gmail / X is not connected on this live URL yet. Use email and password — that works now.");
       return;
     }
@@ -94,11 +96,11 @@ function Login() {
           </div>
           <h2 className="font-display text-3xl">Welcome</h2>
           <p className="mt-1 text-sm text-muted">
-            {socialBlocked
+            {vercelNotice
               ? "Use email and password to sign in. Gmail/X on this live URL is being connected."
               : "Sign in with email, Google, or X. Phone is saved on your profile."}
           </p>
-          {socialBlocked ? (
+          {vercelNotice ? (
             <p className="mt-2 text-sm text-muted">
               Is live site par Gmail abhi connect nahi hai. Email aur password se login karein — woh chal raha
               hai.
@@ -107,7 +109,7 @@ function Login() {
 
           {authEnabled ? (
             <>
-              {socialBlocked ? null : (
+              {allowSocial ? (
                 <>
                   <div className="mt-6 space-y-2">
                     {GROK_PROVIDERS.map((p) => (
@@ -124,8 +126,8 @@ function Login() {
                   </div>
                   <p className="my-5 text-center text-xs text-muted">or email and password</p>
                 </>
-              )}
-              <Tabs className={socialBlocked ? "mt-6" : undefined} value={mode} onValueChange={(v) => setMode(v as "in" | "up")}>
+              ) : null}
+              <Tabs className={allowSocial ? undefined : "mt-6"} value={mode} onValueChange={(v) => setMode(v as "in" | "up")}>
                 <TabsList className="w-full">
                   <TabsTrigger value="in" className="flex-1">
                     Sign in
@@ -188,7 +190,7 @@ function Login() {
                 className="mt-3 text-xs text-muted underline-offset-4 hover:underline"
                 onClick={() =>
                   toast.message(
-                    socialBlocked
+                    vercelNotice
                       ? "Password reset needs email delivery. Create a new account with the same email if you are stuck."
                       : "Password reset needs email delivery, which is not configured here. Use Google, X, or create a new account.",
                   )
